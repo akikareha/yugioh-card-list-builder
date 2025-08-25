@@ -1,4 +1,3 @@
-<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
@@ -29,6 +28,92 @@
     <h1>Yu-Gi-Oh! カードリスト生成 — 貼り付け専用 / Card List Builder — paste-only</h1>
     <p class="lead">ページHTMLを貼り付けると Monster/Spell/Trap/Extra の <strong>カード名＋枚数</strong> を整形します。<br>Paste page HTML to build a grouped list of <strong>card names + counts</strong>.</p>
 
+<!-- ===== Usage / 使い方 (embed this block into index.html) ===== -->
+<section class="usage-section" id="usage" aria-labelledby="usage-title">
+  <style>
+    /* Scoped-ish styles (class-prefixed to avoid collisions) */
+    .usage-section { margin: 28px 0; }
+    .usage-title { font-size: 1.25rem; margin: 0 0 12px; }
+    .usage-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 800px) {
+      .usage-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .usage-card {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.03);
+    }
+    .usage-card h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+      opacity: .95;
+    }
+    .usage-card ol {
+      margin: 0 0 10px 1.2em;
+      padding: 0;
+    }
+    .usage-note {
+      font-size: .92rem;
+      opacity: .8;
+      margin: 8px 0 0;
+    }
+    .usage-kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 1px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    /* Light-mode fallback if your page is light */
+    @media (prefers-color-scheme: light) {
+      .usage-card { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.08); }
+      .usage-kbd { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); }
+    }
+  </style>
+
+  <h2 class="usage-title" id="usage-title">Usage / 使い方</h2>
+
+  <div class="usage-grid">
+    <!-- Japanese -->
+    <div class="usage-card" lang="ja">
+      <h3>日本語</h3>
+      <ol>
+        <li>デッキレシピのページを開き、ブラウザで <strong>ページのソース</strong> を表示してHTMLをコピーします。</li>
+        <li>このツール（<code>index.html</code>）をブラウザで開き、<strong>HTML貼り付け</strong> テキストエリアにペーストします。</li>
+        <li><strong>「カードリスト生成 / Build Card List」</strong> をクリックします。</li>
+        <li>整形された <strong>カード名＋枚数</strong> のリストが表示されます。必要に応じて
+          <span class="usage-kbd">コピー / Copy</span> または
+          <span class="usage-kbd">テキスト保存 / Save as .txt</span> を使ってください。
+        </li>
+      </ol>
+      <p class="usage-note">※ ページ内に <code>&lt;!-- ///deck_text --&gt;</code> ～ <code>&lt;!-- #deck_text --&gt;</code> のコメントが含まれている場合は、その区間のみを優先的に解析します。</p>
+    </div>
+
+    <!-- English -->
+    <div class="usage-card" lang="en">
+      <h3>English</h3>
+      <ol>
+        <li>Open the official deck page and view the <strong>page source</strong>, then copy the HTML.</li>
+        <li>Open this tool (<code>index.html</code>) in your browser and paste the HTML into the <strong>Paste HTML</strong> textarea.</li>
+        <li>Click <strong>“カードリスト生成 / Build Card List”</strong>.</li>
+        <li>The formatted list of <strong>card names + counts</strong> will appear. Use
+          <span class="usage-kbd">Copy</span> or
+          <span class="usage-kbd">Save as .txt</span>
+          as needed.
+        </li>
+      </ol>
+      <p class="usage-note">Note: If the HTML contains <code>&lt;!-- ///deck_text --&gt;</code> to <code>&lt;!-- #deck_text --&gt;</code> comment markers, the tool prioritizes parsing only that slice.</p>
+    </div>
+  </div>
+</section>
+<!-- ===== /Usage ===== -->
+
     <section class="card" style="margin-top:16px">
       <label for="paste">HTML貼り付け / Paste HTML</label>
       <textarea id="paste" placeholder="ここにページHTMLを貼り付け / Paste page HTML here" spellcheck="false"></textarea>
@@ -43,6 +128,13 @@
       <label for="listOut">カードリスト / Card List</label>
       <textarea id="listOut" spellcheck="false" placeholder="ここにカードリスト / Card list will appear here"></textarea>
     </section>
+
+    <footer>
+      <style>
+        a { color: #c88; }
+      </style>
+      <p><a href="https://github.com/akikareha/yugioh-card-list-builder">ソースコード / Source Code</a></p>
+    </footer>
   </div>
 
   <script>
