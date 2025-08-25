@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yu-Gi-Oh! Card List Builder — 貼り付け専用</title>
+  <style>
+    :root { --bg:#0b0f13; --panel:#11161d; --muted:#8aa0b4; --text:#e6eef7; --accent:#7cc9ff; --good:#9effc1; --danger:#ff8a8a; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Yu Gothic",sans-serif;color:var(--text);background:radial-gradient(1200px 700px at 20% -10%,#122230 0%,#0b0f13 40% 100%)}
+    .container{max-width:880px;margin:24px auto;padding:0 16px}
+    h1{font-size:1.35rem;margin:0 0 6px}
+    p.lead{margin:0;color:var(--muted)}
+    .card{background:linear-gradient(180deg,#121821 0%,#0e141b 100%);border:1px solid #1c2832;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.03)}
+    label{display:block;margin:10px 0 6px;color:var(--muted)}
+    textarea{width:100%;min-height:220px;resize:vertical;background:#0b1320;color:var(--text);border:1px solid #1b2a3a;border-radius:12px;padding:12px 14px;line-height:1.4;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+    button{border:1px solid #233446;background:linear-gradient(180deg,#1a2938 0%,#162230 100%);color:var(--text);border-radius:12px;padding:10px 14px;font-size:.95rem;cursor:pointer;transition:transform .06s ease,filter .15s ease}
+    button:hover{filter:brightness(1.07)}
+    button:active{transform:translateY(1px)}
+    .accent{border-color:#21495f;background:linear-gradient(180deg,#1a3a52 0%,#142c3e 100%)}
+    .good{border-color:#265b40;background:linear-gradient(180deg,#1a3a2f 0%,#14271f 100%)}
+    .status{margin-top:10px;color:var(--muted);min-height:1.4em}
+    .ok{color:var(--good)} .err{color:var(--danger)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Yu-Gi-Oh! カードリスト生成 — 貼り付け専用 / Card List Builder — paste-only</h1>
+    <p class="lead">ページHTMLを貼り付けると Monster/Spell/Trap/Extra の <strong>カード名＋枚数</strong> を整形します。<br>Paste page HTML to build a grouped list of <strong>card names + counts</strong>.</p>
+
+    <section class="card" style="margin-top:16px">
+      <label for="paste">HTML貼り付け / Paste HTML</label>
+      <textarea id="paste" placeholder="ここにページHTMLを貼り付け / Paste page HTML here" spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="listBtn" class="accent" type="button">カードリスト生成 / Build Card List</button>
+        <button id="copyListBtn" class="good" type="button">コピー / Copy</button>
+        <button id="saveListBtn" class="good" type="button">テキスト保存 / Save as .txt</button>
+        <button id="clearBtn" type="button">クリア / Clear</button>
+      </div>
+      <div id="status" class="status" aria-live="polite"></div>
+
+      <label for="listOut">カードリスト / Card List</label>
+      <textarea id="listOut" spellcheck="false" placeholder="ここにカードリスト / Card list will appear here"></textarea>
+    </section>
+  </div>
+
+  <script>
+  (function(){
+    const $ = (s,el=document)=>el.querySelector(s);
+    const el = {
+      paste: $('#paste'), listOut: $('#listOut'), status: $('#status'),
+      listBtn: $('#listBtn'), copyListBtn: $('#copyListBtn'), saveListBtn: $('#saveListBtn'), clearBtn: $('#clearBtn')
+    };
+
+    function setStatus(msg, kind=''){ el.status.textContent = msg; el.status.className = 'status ' + (kind||''); }
+    function normalizeNewlines(s){ return s.replace(/\r\n?/g,'\n'); }
+
+    function tryExtractSlice(html){
+      // 1) まずはコメント区間 <!-- ///deck_text --> ～ <!-- #deck_text --> のみを抜く
+      const startRe = /<!--\s*\/{3}\s*deck_text\s*-->/i;
+      const endRe   = /<!--\s*#\s*deck_text\s*-->/i;
+      const m1 = html.match(startRe);
+      if(!m1) return html; // マーカーが無いなら全体をそのまま解析に回す
+      const i1 = html.indexOf(m1[0]);
+      const after = html.slice(i1 + m1[0].length);
+      const m2 = after.match(endRe);
+      if(!m2) return html; // 終了が無いなら全体
+      const i2rel = after.indexOf(m2[0]);
+      return after.slice(0, i2rel);
+    }
+
+    function buildCardListFrom(html){
+      const snippet = normalizeNewlines(tryExtractSlice(html)).trim();
+      const doc = new DOMParser().parseFromString(`<!doctype html><html><body>${snippet}</body></html>`, 'text/html');
+      const sections = [
+        { id:'#monster_list', label:'Monster Cards' },
+        { id:'#spell_list',   label:'Spell Cards'   },
+        { id:'#trap_list',    label:'Trap Cards'    },
+        { id:'#extra_list',   label:'Extra Deck'    },
+      ];
+      const lines = [];
+      let found = false;
+      for(const sec of sections){
+        const table = doc.querySelector(sec.id); if(!table) continue;
+        found = true;
+        const total = table.querySelector('th.num span')?.textContent?.trim();
+        lines.push(`## ${sec.label}${total?`（${total}）`:''}`);
+        table.querySelectorAll('tr.row').forEach(tr=>{
+          const name = tr.querySelector('.card_name .icon > span')?.textContent?.trim();
+          const num  = tr.querySelector('.num span')?.textContent?.trim() || '1';
+          if(name) lines.push(`- ${name} ×${num}`);
+        });
+        lines.push('');
+      }
+      if(!found) throw new Error('カード表のテーブルが見つかりません / No deck tables found');
+      return lines.join('\n').trim();
+    }
+
+    function onBuild(){
+      const html = el.paste.value;
+      if(!html.trim()){ setStatus('HTMLを貼り付けてください / Paste HTML first','err'); return; }
+      try{
+        const list = buildCardListFrom(html);
+        el.listOut.value = list;
+        setStatus('カードリスト整形OK / Card list built','ok');
+      }catch(err){
+        console.error(err); setStatus('整形失敗: '+err.message,'err');
+      }
+    }
+
+    async function onCopy(){
+      try{ await navigator.clipboard.writeText(el.listOut.value||''); setStatus('コピーしました / Copied','ok'); }
+      catch{ setStatus('コピー失敗 / Copy failed','err'); }
+    }
+
+    function onSave(){
+      const blob = new Blob([el.listOut.value||''], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'deck_cardlist.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setStatus('保存しました / Saved','ok');
+    }
+
+    function onClear(){ el.paste.value=''; el.listOut.value=''; setStatus('',''); }
+
+    // events
+    el.listBtn.addEventListener('click', onBuild);
+    el.copyListBtn.addEventListener('click', onCopy);
+    el.saveListBtn.addEventListener('click', onSave);
+    el.clearBtn.addEventListener('click', onClear);
+  })();
+  </script>
+</body>
+</html>
