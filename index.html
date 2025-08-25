@@ -7,11 +7,13 @@
     :root { --bg:#0b0f13; --panel:#11161d; --muted:#8aa0b4; --text:#e6eef7; --accent:#7cc9ff; --good:#9effc1; --danger:#ff8a8a; }
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Yu Gothic",sans-serif;color:var(--text);background:radial-gradient(1200px 700px at 20% -10%,#122230 0%,#0b0f13 40% 100%)}
-    .container{max-width:880px;margin:24px auto;padding:0 16px}
+    .container{max-width:980px;margin:24px auto;padding:0 16px}
     h1{font-size:1.35rem;margin:0 0 6px}
     p.lead{margin:0;color:var(--muted)}
     .card{background:linear-gradient(180deg,#121821 0%,#0e141b 100%);border:1px solid #1c2832;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.03)}
     label{display:block;margin:10px 0 6px;color:var(--muted)}
+    .grid{display:grid;gap:16px}
+    @media (min-width: 900px){ .grid{ grid-template-columns: 1fr 1fr; } }
     textarea{width:100%;min-height:220px;resize:vertical;background:#0b1320;color:var(--text);border:1px solid #1b2a3a;border-radius:12px;padding:12px 14px;line-height:1.4;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
     .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
     button{border:1px solid #233446;background:linear-gradient(180deg,#1a2938 0%,#162230 100%);color:var(--text);border-radius:12px;padding:10px 14px;font-size:.95rem;cursor:pointer;transition:transform .06s ease,filter .15s ease}
@@ -25,8 +27,8 @@
 </head>
 <body>
   <div class="container">
-    <h1>Yu-Gi-Oh! カードリスト生成 — 貼り付け専用 / Card List Builder — paste-only</h1>
-    <p class="lead">ページHTMLを貼り付けると Monster/Spell/Trap/Extra の <strong>カード名＋枚数</strong> を整形します。<br>Paste page HTML to build a grouped list of <strong>card names + counts</strong>.</p>
+    <h1>Yu-Gi-Oh! カードリスト生成 / Card List Builder — paste-only</h1>
+    <p class="lead">ページHTMLを貼り付けて、Monster / Spell / Trap / Extra の <strong>カード名＋枚数</strong> を整形。さらに、カード名を <em>公式カード検索（キーワード）</em> へのリンクにしたHTMLも作れます。<br>Paste the page HTML to build a grouped list of <strong>card names + counts</strong>. You can also generate an HTML list where each name links to the official <em>keyword card search</em>.</p>
 
 <!-- ===== Usage / 使い方 (embed this block into index.html) ===== -->
 <section class="usage-section" id="usage" aria-labelledby="usage-title">
@@ -120,13 +122,26 @@
       <div class="actions">
         <button id="listBtn" class="accent" type="button">カードリスト生成 / Build Card List</button>
         <button id="copyListBtn" class="good" type="button">コピー / Copy</button>
-        <button id="saveListBtn" class="good" type="button">テキスト保存 / Save as .txt</button>
+        <button id="saveListBtn" class="good" type="button">テキスト保存 / Save .txt</button>
         <button id="clearBtn" type="button">クリア / Clear</button>
       </div>
       <div id="status" class="status" aria-live="polite"></div>
 
-      <label for="listOut">カードリスト / Card List</label>
-      <textarea id="listOut" spellcheck="false" placeholder="ここにカードリスト / Card list will appear here"></textarea>
+      <div class="grid">
+        <div>
+          <label for="listOut">カードリスト（テキスト）/ Card List (text)</label>
+          <textarea id="listOut" spellcheck="false" placeholder="ここにカードリスト / Card list will appear here"></textarea>
+        </div>
+        <div>
+          <label for="linkedOut">カード検索リンク付きHTML / Linked HTML (names → search)</label>
+          <textarea id="linkedOut" spellcheck="false" placeholder="ここにリンク付きHTML / Linked HTML will appear here"></textarea>
+          <div class="actions">
+            <button id="buildLinkedBtn" class="accent" type="button">リンク付きHTML生成 / Build Linked HTML</button>
+            <button id="copyLinkedBtn" class="good" type="button">コピー / Copy</button>
+            <button id="saveLinkedBtn" class="good" type="button">.html保存 / Save .html</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <footer>
@@ -141,28 +156,30 @@
   (function(){
     const $ = (s,el=document)=>el.querySelector(s);
     const el = {
-      paste: $('#paste'), listOut: $('#listOut'), status: $('#status'),
-      listBtn: $('#listBtn'), copyListBtn: $('#copyListBtn'), saveListBtn: $('#saveListBtn'), clearBtn: $('#clearBtn')
+      paste: $('#paste'), listOut: $('#listOut'), linkedOut: $('#linkedOut'), status: $('#status'),
+      listBtn: $('#listBtn'), copyListBtn: $('#copyListBtn'), saveListBtn: $('#saveListBtn'), clearBtn: $('#clearBtn'),
+      buildLinkedBtn: $('#buildLinkedBtn'), copyLinkedBtn: $('#copyLinkedBtn'), saveLinkedBtn: $('#saveLinkedBtn'),
     };
 
     function setStatus(msg, kind=''){ el.status.textContent = msg; el.status.className = 'status ' + (kind||''); }
     function normalizeNewlines(s){ return s.replace(/\r\n?/g,'\n'); }
+    const searchBase = 'https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=1&keyword=';
+    const esc = (s) => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
     function tryExtractSlice(html){
-      // 1) まずはコメント区間 <!-- ///deck_text --> ～ <!-- #deck_text --> のみを抜く
       const startRe = /<!--\s*\/{3}\s*deck_text\s*-->/i;
       const endRe   = /<!--\s*#\s*deck_text\s*-->/i;
       const m1 = html.match(startRe);
-      if(!m1) return html; // マーカーが無いなら全体をそのまま解析に回す
+      if(!m1) return html;
       const i1 = html.indexOf(m1[0]);
       const after = html.slice(i1 + m1[0].length);
       const m2 = after.match(endRe);
-      if(!m2) return html; // 終了が無いなら全体
+      if(!m2) return html;
       const i2rel = after.indexOf(m2[0]);
       return after.slice(0, i2rel);
     }
 
-    function buildCardListFrom(html){
+    function parseDeck(html){
       const snippet = normalizeNewlines(tryExtractSlice(html)).trim();
       const doc = new DOMParser().parseFromString(`<!doctype html><html><body>${snippet}</body></html>`, 'text/html');
       const sections = [
@@ -171,58 +188,92 @@
         { id:'#trap_list',    label:'Trap Cards'    },
         { id:'#extra_list',   label:'Extra Deck'    },
       ];
-      const lines = [];
+      const result = [];
       let found = false;
       for(const sec of sections){
         const table = doc.querySelector(sec.id); if(!table) continue;
         found = true;
         const total = table.querySelector('th.num span')?.textContent?.trim();
-        lines.push(`## ${sec.label}${total?`（${total}）`:''}`);
+        const rows = [];
         table.querySelectorAll('tr.row').forEach(tr=>{
           const name = tr.querySelector('.card_name .icon > span')?.textContent?.trim();
           const num  = tr.querySelector('.num span')?.textContent?.trim() || '1';
-          if(name) lines.push(`- ${name} ×${num}`);
+          if(name) rows.push({ name, num });
         });
-        lines.push('');
+        result.push({ label: sec.label, total, rows });
       }
       if(!found) throw new Error('カード表のテーブルが見つかりません / No deck tables found');
+      return result;
+    }
+
+    function buildTextList(struct){
+      const lines = [];
+      for(const sec of struct){
+        lines.push(`## ${sec.label}${sec.total?`（${sec.total}）`:''}`);
+        for(const r of sec.rows){ lines.push(`- ${r.name} ×${r.num}`); }
+        lines.push('');
+      }
       return lines.join('\n').trim();
+    }
+
+    function buildLinkedHTML(struct){
+      const parts = [];
+      parts.push('<section class="deck-list">');
+      for(const sec of struct){
+        parts.push(`<h3>${esc(sec.label)}${sec.total?`（${esc(sec.total)}）`:''}</h3>`);
+        parts.push('<ul>');
+        for(const r of sec.rows){
+          const q = encodeURIComponent(r.name);
+          const href = `${searchBase}${q}`;
+          parts.push(`<li><a href="${href}" target="_blank" rel="noopener noreferrer">${esc(r.name)}</a> ×${esc(String(r.num))}</li>`);
+        }
+        parts.push('</ul>');
+      }
+      parts.push('</section>');
+      return parts.join('\n');
     }
 
     function onBuild(){
       const html = el.paste.value;
       if(!html.trim()){ setStatus('HTMLを貼り付けてください / Paste HTML first','err'); return; }
       try{
-        const list = buildCardListFrom(html);
-        el.listOut.value = list;
+        const struct = parseDeck(html);
+        el.listOut.value = buildTextList(struct);
         setStatus('カードリスト整形OK / Card list built','ok');
-      }catch(err){
-        console.error(err); setStatus('整形失敗: '+err.message,'err');
-      }
+      }catch(err){ console.error(err); setStatus('整形失敗: '+err.message,'err'); }
     }
 
-    async function onCopy(){
-      try{ await navigator.clipboard.writeText(el.listOut.value||''); setStatus('コピーしました / Copied','ok'); }
+    function onBuildLinked(){
+      const html = el.paste.value;
+      if(!html.trim()){ setStatus('HTMLを貼り付けてください / Paste HTML first','err'); return; }
+      try{
+        const struct = parseDeck(html);
+        el.linkedOut.value = buildLinkedHTML(struct);
+        setStatus('リンク付きHTML生成OK / Linked HTML built','ok');
+      }catch(err){ console.error(err); setStatus('生成失敗: '+err.message,'err'); }
+    }
+
+    async function copyToClipboard(text){
+      try{ await navigator.clipboard.writeText(text||''); setStatus('コピーしました / Copied','ok'); }
       catch{ setStatus('コピー失敗 / Copy failed','err'); }
     }
 
-    function onSave(){
-      const blob = new Blob([el.listOut.value||''], { type: 'text/plain;charset=utf-8' });
+    function saveAs(name, mime, content){
+      const blob = new Blob([content||''], { type: mime+';charset=utf-8' });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'deck_cardlist.txt';
-      a.click();
-      URL.revokeObjectURL(a.href);
+      a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
       setStatus('保存しました / Saved','ok');
     }
 
-    function onClear(){ el.paste.value=''; el.listOut.value=''; setStatus('',''); }
-
     // events
     el.listBtn.addEventListener('click', onBuild);
-    el.copyListBtn.addEventListener('click', onCopy);
-    el.saveListBtn.addEventListener('click', onSave);
-    el.clearBtn.addEventListener('click', onClear);
+    el.copyListBtn.addEventListener('click', ()=>copyToClipboard(el.listOut.value));
+    el.saveListBtn.addEventListener('click', ()=>saveAs('deck_cardlist.txt','text/plain', el.listOut.value));
+    el.clearBtn.addEventListener('click', ()=>{ el.paste.value=''; el.listOut.value=''; el.linkedOut.value=''; setStatus('',''); });
+
+    el.buildLinkedBtn.addEventListener('click', onBuildLinked);
+    el.copyLinkedBtn.addEventListener('click', ()=>copyToClipboard(el.linkedOut.value));
+    el.saveLinkedBtn.addEventListener('click', ()=>saveAs('deck_cardlist_linked.html','text/html', el.linkedOut.value));
   })();
   </script>
 </body>
